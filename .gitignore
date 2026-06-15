@@ -1,2 +1,8 @@
 venv/
 __pycache__/
+.env
+.deepeval
+.deepeval-cache.json
+.deepeval_telemetry.txt
+.latest_run_full.json
+.latest_test_run.json
