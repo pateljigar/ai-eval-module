@@ -55,6 +55,7 @@ xcode-select --install
 Use [pyenv-win](https://github.com/pyenv-win/pyenv-win)
 > No build dependencies required — pyenv-win downloads pre-compiled Python binaries.
 
+---
 > This project was built and tested on Ubuntu 24.04 LTS.
 
 ## How to run it
