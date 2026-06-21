@@ -6,3 +6,4 @@ __pycache__/
 .deepeval_telemetry.txt
 .latest_run_full.json
 .latest_test_run.json
+.vscode/
