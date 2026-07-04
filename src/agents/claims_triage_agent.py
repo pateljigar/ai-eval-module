@@ -34,6 +34,10 @@ def classify_claim(state: ClaimsTriageState):
 Classify the claim and return ONLY valid JSON with two keys:
 - claim_type: one of motor_vehicle, property, public_liability, other
 - urgency: one of low, medium, high, critical
+  - low: no injuries, minor property damage, no immediate action needed
+  - medium: some property damage, no injuries, repair can wait
+  - high: injuries present, medical attention needed, or property damage requiring urgent repair
+  - critical: life-threatening injuries or major structural damage
 
 Return nothing else. No explanation. No markdown. Just the JSON object.""",
         ),
@@ -71,12 +75,13 @@ def research_policy(state: ClaimsTriageState):
             """You are an AusClaim policy research assistant.
 
 You have access to the following policy rules:
-- Motor vehicle claims require a police report if damage exceeds $2500
+- Motor vehicle claims require a police report if damage exceeds $2500. Standard excess is $650. Coverage includes third-party property damage.
 - Standard excess is $650
 - Coverage includes third-party property damage
 - Public liability claims require an incident report and witness statements within 14 days
 - Property claims require photos and repair quotes within 30 days
 - Critical urgency claims are escalated to a senior assessor within 2 hours
+- Other claims do not fall under standard categories and require manual review by a senior assessor
 
 Given the claim type, return ONLY valid JSON with one key:
 - policy_findings: a 1-2 sentence summary of the relevant policy rules for this claim type
@@ -104,6 +109,7 @@ def summarise_decision(state: ClaimsTriageState):
 
 You will receive a claim type, urgency level, and policy findings from a prior research step.
 Your job is to synthesise that information and produce a final decision.
+Your recommendation must be a complete, properly capitalised sentence.
 Do not assert facts about damage amounts unless explicitly stated in the claim input.
 Only use conditional language when referencing policy thresholds.
 

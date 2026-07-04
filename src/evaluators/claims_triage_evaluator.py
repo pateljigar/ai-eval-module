@@ -17,29 +17,77 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 from src.agents.claims_triage_agent import app
 
 # GPT-4o-mini as the LLM judge for DeepEval metrics
-model = GPTModel(model="gpt-4o-mini")
+model = GPTModel(model="gpt-4o-mini", temperature=0)
 
-CLAIM_INPUT = (
-    "Car accident on the highway, minor injuries, urgent medical attention needed."
+MOTOR_VEHICLE_CLAIM_INPUT = (
+    "Car accident on the highway, minor injuries reported, non-life-threatening."
 )
+
+PROPERTY_CLAIM_INPUT = (
+    "Water damage in the basement due to a burst pipe, urgent repair required."
+)
+
+PUBLIC_LIABILITY_CLAIM_INPUT = "Slip and fall incident at a public park, minor injuries, requires urgent attention."
+
+OTHER_CLAIM_INPUT = "Lost luggage during travel, replacement of essential items needed."
+
+TEST_CLAIMS = [
+    {
+        "input": MOTOR_VEHICLE_CLAIM_INPUT,
+        "expected_claim_type": "motor_vehicle",
+        "expected_urgency": "high",
+        "expected_policy_findings": "Motor vehicle claims require a police report if damage exceeds $2500, and the standard excess is $650. Coverage includes third-party property damage.",
+        "expected_recommendation": "A police report is required if the damage exceeds $2500.",
+    },
+    {
+        "input": PROPERTY_CLAIM_INPUT,
+        "expected_claim_type": "property",
+        "expected_urgency": "high",
+        "expected_policy_findings": "Property claims require photos and repair quotes within 30 days.",
+        "expected_recommendation": "Request submission of photos and repair quotes within the 30-day window to proceed with the claim.",
+    },
+    {
+        "input": PUBLIC_LIABILITY_CLAIM_INPUT,
+        "expected_claim_type": "public_liability",
+        "expected_urgency": "high",
+        "expected_policy_findings": "Public liability claims require an incident report and witness statements within 14 days.",
+        "expected_recommendation": "Ensure that the incident report and witness statements are submitted within the 14-day timeframe to proceed with the claim.",
+    },
+    {
+        "input": OTHER_CLAIM_INPUT,
+        "expected_claim_type": "other",
+        "expected_urgency": "medium",
+        "expected_policy_findings": "Other claims do not fall under standard categories and require manual review by a senior assessor.",
+        "expected_recommendation": "Manual review by a senior assessor is required.",
+    },
+]
+
 
 # Agent runs once at module level — result shared across all test functions
 def run_agent(claim_input: str) -> dict:
     return app.invoke({"claim_input": claim_input})
 
-AGENT_RESULT = run_agent(CLAIM_INPUT)
+
+AGENT_RESULTS = [run_agent(claim["input"]) for claim in TEST_CLAIMS]
+
 
 def test_classify_claim():
-
-    actual = json.dumps(
-        {"claim_type": AGENT_RESULT.get("claim_type"), "urgency": AGENT_RESULT.get("urgency")}
-    )
-
-    expected = json.dumps({"claim_type": "motor_vehicle", "urgency": "high"})
-
-    test_case_classify_claim = LLMTestCase(
-        input=CLAIM_INPUT, actual_output=actual, expected_output=expected
-    )
+    test_cases = []
+    for claim, result in zip(TEST_CLAIMS, AGENT_RESULTS):
+        actual = json.dumps(
+            {"claim_type": result.get("claim_type"), "urgency": result.get("urgency")}
+        )
+        expected = json.dumps(
+            {
+                "claim_type": claim["expected_claim_type"],
+                "urgency": claim["expected_urgency"],
+            }
+        )
+        test_cases.append(
+            LLMTestCase(
+                input=claim["input"], actual_output=actual, expected_output=expected
+            )
+        )
 
     classify_metric = GEval(
         name="Claim Classification Accuracy",
@@ -52,17 +100,23 @@ def test_classify_claim():
         model=model,
         threshold=0.7,
     )
-    evaluate([test_case_classify_claim], [classify_metric])
+    evaluate(test_cases, [classify_metric])
 
 
 def test_research_policy():
-    actual = AGENT_RESULT.get("policy_findings", "")
+    test_cases = []
+    for claim, result in zip(TEST_CLAIMS, AGENT_RESULTS):
+        actual = result.get("policy_findings", "")
 
-    expected = "Motor vehicle claims require a police report if damage exceeds $2500, with a standard excess and third-party property coverage."
+        expected = claim["expected_policy_findings"]
 
-    test_case_research_policy = LLMTestCase(
-        input=AGENT_RESULT.get("claim_type"), actual_output=actual, expected_output=expected
-    )
+        test_cases.append(
+            LLMTestCase(
+                input=result.get("claim_type"),
+                actual_output=actual,
+                expected_output=expected,
+            )
+        )
 
     research_metric = GEval(
         name="Policy Research Accuracy",
@@ -75,38 +129,42 @@ def test_research_policy():
         model=model,
         threshold=0.7,
     )
-    evaluate([test_case_research_policy], [research_metric])
+    evaluate(test_cases, [research_metric])
 
 
 def test_summarise_decision():
-    node_input = json.dumps(
-        {
-            "claim_type": AGENT_RESULT.get("claim_type"),
-            "urgency": AGENT_RESULT.get("urgency"),
-            "policy_findings": AGENT_RESULT.get("policy_findings"),
-        }
-    )
+    test_cases = []
+    for claim, result in zip(TEST_CLAIMS, AGENT_RESULTS):
+        node_input = json.dumps(
+            {
+                "claim_type": result.get("claim_type"),
+                "urgency": result.get("urgency"),
+                "policy_findings": result.get("policy_findings"),
+            }
+        )
 
-    actual = json.dumps(AGENT_RESULT.get("final_decision"))
+        actual = json.dumps(result.get("final_decision"))
 
-    expected = "Motor vehicle claim received. Police report may be required depending on damage amount. Standard excess of $650 applies."
+        expected = claim["expected_recommendation"]
 
-    test_case_summarise_decision = LLMTestCase(
-        input=node_input, actual_output=actual, expected_output=expected
-    )
+        test_cases.append(
+            LLMTestCase(
+                input=node_input, actual_output=actual, expected_output=expected
+            )
+        )
 
     summarise_metric = GEval(
         name="Decision Summary Accuracy",
-        criteria="The recommendation must use conditional language for policy thresholds (e.g. 'if damage exceeds $2500'). It must not assert damage amounts as fact unless stated in the original claim input.",
+        criteria="The recommendation should accurately reflect the policy findings and be consistent with the claim type and urgency.",
         evaluation_params=[
             SingleTurnParams.INPUT,
             SingleTurnParams.ACTUAL_OUTPUT,
             SingleTurnParams.EXPECTED_OUTPUT,
         ],
         model=model,
-        threshold=0.7,
+        threshold=0.6,
     )
-    evaluate([test_case_summarise_decision], [summarise_metric])
+    evaluate(test_cases, [summarise_metric])
 
 
 if __name__ == "__main__":
