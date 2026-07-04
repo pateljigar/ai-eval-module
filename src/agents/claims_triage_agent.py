@@ -147,5 +147,6 @@ graph.add_edge("summarise_decision", END)
 
 app = graph.compile()
 
-result = app.invoke({"claim_input": "Car accident on M1, airbags deployed"})
-print(result)
+if __name__ == "__main__":
+    result = app.invoke({"claim_input": "Car accident on M1, airbags deployed"})
+    print(result)

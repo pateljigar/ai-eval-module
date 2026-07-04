@@ -23,16 +23,16 @@ CLAIM_INPUT = (
     "Car accident on the highway, minor injuries, urgent medical attention needed."
 )
 
-# Agent is invoked once per test function — caching will be added in Module 3
+# Agent runs once at module level — result shared across all test functions
 def run_agent(claim_input: str) -> dict:
     return app.invoke({"claim_input": claim_input})
 
+AGENT_RESULT = run_agent(CLAIM_INPUT)
 
 def test_classify_claim():
-    result = run_agent(CLAIM_INPUT)
 
     actual = json.dumps(
-        {"claim_type": result.get("claim_type"), "urgency": result.get("urgency")}
+        {"claim_type": AGENT_RESULT.get("claim_type"), "urgency": AGENT_RESULT.get("urgency")}
     )
 
     expected = json.dumps({"claim_type": "motor_vehicle", "urgency": "high"})
@@ -56,14 +56,12 @@ def test_classify_claim():
 
 
 def test_research_policy():
-    result = run_agent(CLAIM_INPUT)
-
-    actual = result.get("policy_findings", "")
+    actual = AGENT_RESULT.get("policy_findings", "")
 
     expected = "Motor vehicle claims require a police report if damage exceeds $2500, with a standard excess and third-party property coverage."
 
     test_case_research_policy = LLMTestCase(
-        input=result.get("claim_type"), actual_output=actual, expected_output=expected
+        input=AGENT_RESULT.get("claim_type"), actual_output=actual, expected_output=expected
     )
 
     research_metric = GEval(
@@ -81,16 +79,15 @@ def test_research_policy():
 
 
 def test_summarise_decision():
-    result = run_agent(CLAIM_INPUT)
     node_input = json.dumps(
         {
-            "claim_type": result.get("claim_type"),
-            "urgency": result.get("urgency"),
-            "policy_findings": result.get("policy_findings"),
+            "claim_type": AGENT_RESULT.get("claim_type"),
+            "urgency": AGENT_RESULT.get("urgency"),
+            "policy_findings": AGENT_RESULT.get("policy_findings"),
         }
     )
 
-    actual = json.dumps(result.get("final_decision"))
+    actual = json.dumps(AGENT_RESULT.get("final_decision"))
 
     expected = "Motor vehicle claim received. Police report may be required depending on damage amount. Standard excess of $650 applies."
 
