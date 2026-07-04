@@ -104,6 +104,8 @@ def summarise_decision(state: ClaimsTriageState):
 
 You will receive a claim type, urgency level, and policy findings from a prior research step.
 Your job is to synthesise that information and produce a final decision.
+Do not assert facts about damage amounts unless explicitly stated in the claim input.
+Only use conditional language when referencing policy thresholds.
 
 Return ONLY valid JSON with this exact structure:
 {
