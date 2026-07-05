@@ -9,7 +9,7 @@ from openai import OpenAI
 client = OpenAI()
 
 # GPT-4o-mini as the LLM judge for evaluation
-model = GPTModel(model="gpt-4o-mini")
+model = GPTModel(model="gpt-4o-mini", temperature=0)
 
 # Faithfulness checks if the response contradicts the retrieval context (hallucination detection)
 faithfulness_metric = FaithfulnessMetric(
@@ -23,7 +23,7 @@ relevance_metric = AnswerRelevancyMetric(
 
 # Simulated RAG knowledge base — source of truth for the chatbot
 rag_knowledge_base = [
-    "AusClaim covers windscreen repair but not full replacement under the basic plan.",
+    "AusClaim covers windscreen repair under the basic plan.",
     "Claims can be lodged via phone or the online portal with a valid policy number.",
 ]
 
@@ -39,7 +39,7 @@ def generate_response(question, retrieval_context):
     messages = [
         {
             "role": "system",
-            "content": f"You are an AusClaim assistant. Only answer based on this context: {retrieval_context}",
+            "content": f"You are an AusClaim assistant. Answer the question directly and concisely. Only use information from this context: {retrieval_context}. Do not add information beyond what was asked.",
         },
         {"role": "user", "content": question},
     ]

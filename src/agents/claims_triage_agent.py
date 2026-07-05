@@ -88,7 +88,7 @@ Given the claim type, return ONLY valid JSON with one key:
 
 Return nothing else. No markdown. Just the JSON object.""",
         ),
-        ("human", f"Claim type: {state['claim_type']}"),
+        ("human", f"Claim type: {state.get('claim_type', 'unknown')}"),
     ]
     response = model.invoke(messages)
     try:
@@ -126,7 +126,7 @@ Return nothing else. No markdown. Just the JSON object.""",
         ),
         (
             "human",
-            f"Claim type: {state['claim_type']}, Urgency: {state['urgency']}, Policy findings: {state.get('policy_findings')}",
+            f"Claim type: {state.get('claim_type', 'unknown')}, Urgency: {state.get('urgency', 'unknown')}, Policy findings: {state.get('policy_findings', 'not available')}",
         ),
     ]
     response = model.invoke(messages)
