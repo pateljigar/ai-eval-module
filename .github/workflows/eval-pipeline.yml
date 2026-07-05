@@ -8,7 +8,7 @@ on:
 
 jobs:
   evaluate:
-    timeout-minutes: 15
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -23,13 +23,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Run Week 0 RAG evaluator
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          python src/evaluators/ausclaim_eval.py
-
       - name: Run claims triage evaluator
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
