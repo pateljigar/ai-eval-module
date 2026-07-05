@@ -91,7 +91,7 @@ claim_input
 |---|---|---|
 | `classify_claim` | Claim Classification Accuracy | 0.70 |
 | `research_policy` | Policy Research Accuracy | 0.70 |
-| `summarise_decision` | Decision Summary Accuracy | 0.55 |
+| `summarise_decision` | Decision Summary Accuracy | 0.60 |
 
 ---
 
