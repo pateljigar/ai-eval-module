@@ -10,6 +10,11 @@ from langchain_openai import ChatOpenAI
 import json
 from dotenv import load_dotenv
 
+try:
+    from src.agents.policy_store import query_policy
+except ModuleNotFoundError:
+    from policy_store import query_policy
+
 load_dotenv()
 
 
@@ -22,7 +27,7 @@ class ClaimsTriageState(TypedDict):
     error: Optional[str]
 
 
-model = ChatOpenAI(model="gpt-4o-mini")
+model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
 def classify_claim(state: ClaimsTriageState):
@@ -69,26 +74,21 @@ Return nothing else. No explanation. No markdown. Just the JSON object.""",
 # - final_decision.claim_type matches the original classification output
 def research_policy(state: ClaimsTriageState):
     print("Running Research policy:")
+    retrieved_policy = query_policy(state.get("claim_type", "unknown"))
     messages = [
         (
             "system",
             """You are an AusClaim policy research assistant.
-
-You have access to the following policy rules:
-- Motor vehicle claims require a police report if damage exceeds $2500. Standard excess is $650. Coverage includes third-party property damage.
-- Standard excess is $650
-- Coverage includes third-party property damage
-- Public liability claims require an incident report and witness statements within 14 days
-- Property claims require photos and repair quotes within 30 days
-- Critical urgency claims are escalated to a senior assessor within 2 hours
-- Other claims do not fall under standard categories and require manual review by a senior assessor
-
-Given the claim type, return ONLY valid JSON with one key:
-- policy_findings: a 1-2 sentence summary of the relevant policy rules for this claim type
+Use only the policy provided to summarise the requirements for this claim.
+Return ONLY valid JSON with one key:
+- policy_findings: a 1-2 sentence summary based on the retrieved policy
 
 Return nothing else. No markdown. Just the JSON object.""",
         ),
-        ("human", f"Claim type: {state.get('claim_type', 'unknown')}"),
+        (
+            "human",
+            f"Claim type: {state.get('claim_type', 'unknown')}\nPolicy: {retrieved_policy}",
+        ),
     ]
     response = model.invoke(messages)
     try:
