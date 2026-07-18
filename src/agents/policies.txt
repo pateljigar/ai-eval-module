@@ -1,0 +1,4 @@
+Motor vehicle claim requires a police report if damage exceeds $2500. Standard excess is $650. Coverage includes third-party property damage.
+Property claim requires photos and repair quotes submitted within 30 days to proceed.
+Public liability claim requires an incident report and witness statements within 14 days.
+Unclassified claim does not match any standard category and requires escalation to a senior assessor for manual review.
