@@ -1,7 +1,8 @@
 """
 AusClaim AI — Claims Triage Agent (Module 1)
 LangGraph agent: classify_claim → research_policy → summarise_decision
-System under test for Module 2 DeepEval evaluation pipeline.
+System under test for DeepEval evaluation pipeline.
+Instrumented with Langfuse observability (Module 7).
 """
 
 from typing import TypedDict, Optional
@@ -9,6 +10,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 import json
 from dotenv import load_dotenv
+from langfuse import get_client
 
 try:
     from src.agents.policy_store import query_policy
@@ -16,6 +18,7 @@ except ModuleNotFoundError:
     from policy_store import query_policy
 
 load_dotenv()
+langfuse = get_client()
 
 
 class ClaimsTriageState(TypedDict):
@@ -32,34 +35,39 @@ model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 def classify_claim(state: ClaimsTriageState):
     print("Running Classifying claim:")
-    messages = [
-        (
-            "system",
-            """You are an AusClaim insurance triage assistant.
-Classify the claim and return ONLY valid JSON with two keys:
-- claim_type: one of motor_vehicle, property, public_liability, other
-- urgency: one of low, medium, high, critical
-  - low: no injuries, minor property damage, no immediate action needed
-  - medium: some property damage, no injuries, repair can wait
-  - high: injuries present, medical attention needed, or property damage requiring urgent repair
-  - critical: life-threatening injuries or major structural damage
+    with langfuse.start_as_current_observation(
+        as_type="span", name="classify_claim"
+    ) as span:
+        span.update(input={"claim_input": state["claim_input"]})
+        messages = [
+            (
+                "system",
+                """You are an AusClaim insurance triage assistant.
+        Classify the claim and return ONLY valid JSON with two keys:
+        - claim_type: one of motor_vehicle, property, public_liability, other
+        - urgency: one of low, medium, high, critical
+        - low: no injuries, minor property damage, no immediate action needed
+        - medium: some property damage, no injuries, repair can wait
+        - high: injuries present, medical attention needed, or property damage requiring urgent repair
+        - critical: life-threatening injuries or major structural damage
 
-Return nothing else. No explanation. No markdown. Just the JSON object.""",
-        ),
-        ("human", state["claim_input"]),
-    ]
-    response = model.invoke(messages)
-    try:
-        claim_data = json.loads(response.content)
-        print(
-            f"  ✓ claim_type: {claim_data.get('claim_type')}, urgency: {claim_data.get('urgency')}"
-        )
-        return {
-            "claim_type": claim_data.get("claim_type"),
-            "urgency": claim_data.get("urgency"),
-        }
-    except json.JSONDecodeError:
-        return {"error": "Failed to parse claim classification"}
+        Return nothing else. No explanation. No markdown. Just the JSON object.""",
+            ),
+            ("human", state["claim_input"]),
+        ]
+        response = model.invoke(messages)
+        try:
+            claim_data = json.loads(response.content)
+            print(
+                f"  ✓ claim_type: {claim_data.get('claim_type')}, urgency: {claim_data.get('urgency')}"
+            )
+            span.update(output=claim_data)
+            return {
+                "claim_type": claim_data.get("claim_type"),
+                "urgency": claim_data.get("urgency"),
+            }
+        except json.JSONDecodeError:
+            return {"error": "Failed to parse claim classification"}
 
 
 # DELIBERATE FAILURE MODE — silent state corruption
@@ -74,38 +82,53 @@ Return nothing else. No explanation. No markdown. Just the JSON object.""",
 # - final_decision.claim_type matches the original classification output
 def research_policy(state: ClaimsTriageState):
     print("Running Research policy:")
-    retrieved_policy = query_policy(state.get("claim_type", "unknown"))
-    messages = [
-        (
-            "system",
-            """You are an AusClaim policy research assistant.
-Use only the policy provided to summarise the requirements for this claim.
-Return ONLY valid JSON with one key:
-- policy_findings: a 1-2 sentence summary based on the retrieved policy
+    with langfuse.start_as_current_observation(
+        as_type="span", name="research_policy"
+    ) as span:
+        span.update(input={"claim_type": state.get("claim_type", "unknown")})
+        retrieved_policy = query_policy(state.get("claim_type", "unknown"))
+        messages = [
+            (
+                "system",
+                """You are an AusClaim policy research assistant.
+    Use only the policy provided to summarise the requirements for this claim.
+    Return ONLY valid JSON with one key:
+    - policy_findings: a 1-2 sentence summary based on the retrieved policy
 
-Return nothing else. No markdown. Just the JSON object.""",
-        ),
-        (
-            "human",
-            f"Claim type: {state.get('claim_type', 'unknown')}\nPolicy: {retrieved_policy}",
-        ),
-    ]
-    response = model.invoke(messages)
-    try:
-        claim_data = json.loads(response.content)
-        print(f"  ✓ policy_findings: {claim_data.get('policy_findings')}")
-        # FAILURE MODE REVERTED — was: return {"claim_type": "CORRUPTED"}
-        return {"policy_findings": claim_data.get("policy_findings")}
-    except json.JSONDecodeError:
-        return {"error": "Failed to research policy"}
+    Return nothing else. No markdown. Just the JSON object.""",
+            ),
+            (
+                "human",
+                f"Claim type: {state.get('claim_type', 'unknown')}\nPolicy: {retrieved_policy}",
+            ),
+        ]
+        response = model.invoke(messages)
+        try:
+            claim_data = json.loads(response.content)
+            print(f"  ✓ policy_findings: {claim_data.get('policy_findings')}")
+            span.update(output=claim_data)
+            # FAILURE MODE REVERTED — was: return {"claim_type": "CORRUPTED"}
+            return {"policy_findings": claim_data.get("policy_findings")}
+        except json.JSONDecodeError:
+            return {"error": "Failed to research policy"}
 
 
 def summarise_decision(state: ClaimsTriageState):
     print("Running Summarize decision:")
-    messages = [
-        (
-            "system",
-            """You are an AusClaim senior claims assessor.
+    with langfuse.start_as_current_observation(
+        as_type="span", name="summarise_decision"
+    ) as span:
+        span.update(
+            input={
+                "claim_type": state.get("claim_type", "unknown"),
+                "urgency": state.get("urgency", "unknown"),
+                "policy_findings": state.get("policy_findings", "not available"),
+            }
+        )
+        messages = [
+            (
+                "system",
+                """You are an AusClaim senior claims assessor.
 
 You will receive a claim type, urgency level, and policy findings from a prior research step.
 Your job is to synthesise that information and produce a final decision.
@@ -123,19 +146,20 @@ Return ONLY valid JSON with this exact structure:
 }
 
 Return nothing else. No markdown. Just the JSON object.""",
-        ),
-        (
-            "human",
-            f"Claim type: {state.get('claim_type', 'unknown')}, Urgency: {state.get('urgency', 'unknown')}, Policy findings: {state.get('policy_findings', 'not available')}",
-        ),
-    ]
-    response = model.invoke(messages)
-    try:
-        claim_data = json.loads(response.content)
-        print(f"  ✓ final_decision: {claim_data.get('final_decision')}")
-        return {"final_decision": claim_data.get("final_decision")}
-    except json.JSONDecodeError:
-        return {"error": "Failed to parse final decision"}
+            ),
+            (
+                "human",
+                f"Claim type: {state.get('claim_type', 'unknown')}, Urgency: {state.get('urgency', 'unknown')}, Policy findings: {state.get('policy_findings', 'not available')}",
+            ),
+        ]
+        response = model.invoke(messages)
+        try:
+            claim_data = json.loads(response.content)
+            span.update(output=claim_data)
+            print(f"  ✓ final_decision: {claim_data.get('final_decision')}")
+            return {"final_decision": claim_data.get("final_decision")}
+        except json.JSONDecodeError:
+            return {"error": "Failed to parse final decision"}
 
 
 graph = StateGraph(ClaimsTriageState)

@@ -27,5 +27,8 @@ jobs:
       - name: Run claims triage evaluator
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
         run: |
           python src/evaluators/claims_triage_evaluator.py
