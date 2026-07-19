@@ -20,7 +20,6 @@ except ModuleNotFoundError:
 load_dotenv()
 langfuse = get_client()
 
-
 class ClaimsTriageState(TypedDict):
     claim_input: str
     claim_type: Optional[str]
@@ -36,7 +35,7 @@ model = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 def classify_claim(state: ClaimsTriageState):
     print("Running Classifying claim:")
     with langfuse.start_as_current_observation(
-        as_type="span", name="classify_claim"
+        as_type="generation", name="classify_claim", model=model.model_name
     ) as span:
         span.update(input={"claim_input": state["claim_input"]})
         messages = [
@@ -56,12 +55,21 @@ def classify_claim(state: ClaimsTriageState):
             ("human", state["claim_input"]),
         ]
         response = model.invoke(messages)
+        # Extract token usage from response metadata
+        usage = response.response_metadata.get("token_usage", {})
         try:
             claim_data = json.loads(response.content)
             print(
                 f"  ✓ claim_type: {claim_data.get('claim_type')}, urgency: {claim_data.get('urgency')}"
             )
-            span.update(output=claim_data)
+            span.update(
+                output=claim_data,
+                usage_details={
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                },
+            )
             return {
                 "claim_type": claim_data.get("claim_type"),
                 "urgency": claim_data.get("urgency"),
@@ -83,7 +91,7 @@ def classify_claim(state: ClaimsTriageState):
 def research_policy(state: ClaimsTriageState):
     print("Running Research policy:")
     with langfuse.start_as_current_observation(
-        as_type="span", name="research_policy"
+        as_type="generation", name="research_policy", model=model.model_name
     ) as span:
         span.update(input={"claim_type": state.get("claim_type", "unknown")})
         retrieved_policy = query_policy(state.get("claim_type", "unknown"))
@@ -103,10 +111,19 @@ def research_policy(state: ClaimsTriageState):
             ),
         ]
         response = model.invoke(messages)
+        # Extract token usage from response metadata
+        usage = response.response_metadata.get("token_usage", {})
         try:
             claim_data = json.loads(response.content)
             print(f"  ✓ policy_findings: {claim_data.get('policy_findings')}")
-            span.update(output=claim_data)
+            span.update(
+                output=claim_data,
+                usage_details={
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                },
+            )
             # FAILURE MODE REVERTED — was: return {"claim_type": "CORRUPTED"}
             return {"policy_findings": claim_data.get("policy_findings")}
         except json.JSONDecodeError:
@@ -116,7 +133,7 @@ def research_policy(state: ClaimsTriageState):
 def summarise_decision(state: ClaimsTriageState):
     print("Running Summarize decision:")
     with langfuse.start_as_current_observation(
-        as_type="span", name="summarise_decision"
+        as_type="generation", name="summarise_decision", model=model.model_name
     ) as span:
         span.update(
             input={
@@ -153,9 +170,18 @@ Return nothing else. No markdown. Just the JSON object.""",
             ),
         ]
         response = model.invoke(messages)
+        # Extract token usage from response metadata
+        usage = response.response_metadata.get("token_usage", {})
         try:
             claim_data = json.loads(response.content)
-            span.update(output=claim_data)
+            span.update(
+                output=claim_data,
+                usage_details={
+                    "prompt_tokens": usage.get("prompt_tokens", 0),
+                    "completion_tokens": usage.get("completion_tokens", 0),
+                    "total_tokens": usage.get("total_tokens", 0),
+                },
+            )
             print(f"  ✓ final_decision: {claim_data.get('final_decision')}")
             return {"final_decision": claim_data.get("final_decision")}
         except json.JSONDecodeError:
