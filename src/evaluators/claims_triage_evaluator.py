@@ -1,7 +1,8 @@
 """
-AusClaim AI — Claims Triage Evaluator (Module 2)
-DeepEval test cases for each node in the LangGraph claims triage agent.
+AusClaim AI — Claims Triage Evaluator (Modules 2-4)
+DeepEval GEval test cases for each node in the LangGraph claims triage agent.
 Evaluates: classify_claim, research_policy, summarise_decision
+Covers 4 claim types: motor_vehicle, property, public_liability, other
 """
 
 import json

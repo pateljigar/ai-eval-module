@@ -1,6 +1,6 @@
 """
-AusClaim AI — Promptfoo Red-Team Provider (Module 8)
-Python provider bridge between Promptfoo and the LangGraph claims triage agent.
+AusClaim AI — Promptfoo Provider (Module 8)
+Connects Promptfoo to the LangGraph claims triage agent for red-teaming evaluation.
 Exposes call_api() as required by Promptfoo's Python provider API contract.
 See: https://www.promptfoo.dev/docs/providers/python/
 """
