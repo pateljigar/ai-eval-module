@@ -8,8 +8,13 @@ on:
 
 jobs:
   evaluate:
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,10 +30,16 @@ jobs:
           pip install -r requirements.txt
           pip install click==8.3.0 --force-reinstall --no-deps
       - name: Run claims triage evaluator
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
-          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
-          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
         run: |
           python src/evaluators/claims_triage_evaluator.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "**/.github/workflows/*.yml"
+
+      - name: Run Promptfoo red-team evaluation
+        run: |
+          npx promptfoo@latest eval -c promptfoo.yaml
