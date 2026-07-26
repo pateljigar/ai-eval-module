@@ -2,7 +2,7 @@
 
 An end-to-end AI evaluation pipeline for a LangGraph claims triage agent. Built to demonstrate how to evaluate multi-step LLM agents — not just their final output, but each reasoning step independently.
 
-**Tech Stack**: Python 3.11, LangGraph, LangChain, DeepEval, ChromaDB, Langfuse, Promptfoo, OpenAI GPT-4o-mini, GitHub Actions
+**Tech Stack**: Python 3.11, LangGraph, LangChain, DeepEval, ChromaDB, Langfuse, Promptfoo, RAGAS, OpenAI GPT-4o-mini, GitHub Actions
 
 ---
 
@@ -10,7 +10,7 @@ An end-to-end AI evaluation pipeline for a LangGraph claims triage agent. Built 
 
 This repository demonstrates an end-to-end AI evaluation pipeline that automatically scores chatbot responses for faithfulness and answer relevancy using LLM-as-a-judge. Responses are generated live against a simulated RAG knowledge base and evaluated against a pre-defined quality threshold.
 
-It also evaluates a multi-step LangGraph claims triage agent — checking each reasoning node independently so failures can be traced to the exact step where they occur.
+It also evaluates a multi-step LangGraph claims triage agent — checking each reasoning node independently so failures can be traced to the exact step where they occur. Module 9 extends this by evaluating the `research_policy` node at the retrieval and generation level independently, using RAGAS to score whether ChromaDB retrieved the right policy rule and whether the LLM used it faithfully.
 
 ---
 
@@ -22,7 +22,7 @@ Businesses are integrating AI chatbots into customer-facing workflows to automat
 
 ## What this builds
 
-A five-module portfolio project that goes from a raw LLM call to a fully automated CI evaluation pipeline.
+A nine-module portfolio project that goes from a raw LLM call to a fully automated CI evaluation pipeline.
 
 | Module   | What it does                                                                   |
 | -------- | ------------------------------------------------------------------------------ |
@@ -35,6 +35,7 @@ A five-module portfolio project that goes from a raw LLM call to a fully automat
 | Module 6 | ChromaDB vector retrieval — replaces hardcoded policy knowledge base           |
 | Module 7 | Langfuse observability — per-node trace, token, and cost tracking              |
 | Module 8 | Promptfoo red-teaming — adversarial test suite with prompt injection hardening |
+| Module 9 | RAGAS evaluation — retrieval and generation quality scoring for `research_policy` node |
 
 ---
 
@@ -54,6 +55,9 @@ claim_input
     │
     ▼
 [DeepEval GEval]      → per-node scores, pass/fail
+    │
+    ▼
+[RAGAS]               → retrieval and generation quality scores for research_policy
     │
     ▼
 [Langfuse]            → traces, token usage, cost per node
@@ -78,13 +82,14 @@ claim_input
    - **Answer Relevancy** — does the response directly address the question asked?
 4. Each metric scores 0.0 to 1.0 — responses scoring below 0.7 fail the quality gate
 
-**Modules 1–8 LangGraph pipeline:**
+**Modules 1–9 LangGraph pipeline:**
 1. A claim is passed to the AusClaim AI triage agent
 2. The agent classifies the claim, retrieves relevant policy from ChromaDB, and produces a structured decision
 3. DeepEval evaluates each node independently using GEval
-4. Langfuse captures every LLM call — prompt, response, tokens, latency, cost
-5. Promptfoo runs adversarial test cases against the agent on every PR
-6. GitHub Actions runs the full pipeline automatically
+4. RAGAS evaluates the `research_policy` node separately — scoring retrieval quality (Context Precision, Context Recall) and generation quality (Faithfulness, Answer Relevancy)
+5. Langfuse captures every LLM call — prompt, response, tokens, latency, cost
+6. Promptfoo runs adversarial test cases against the agent on every PR
+7. GitHub Actions runs the full pipeline automatically
 
 ---
 
@@ -105,6 +110,15 @@ claim_input
 | `research_policy`    | Policy Research Accuracy      | 0.70      |
 | `summarise_decision` | Decision Summary Accuracy     | 0.60      |
 
+**RAGAS metrics — `research_policy` node:**
+
+| Metric             | What it checks                                              |
+| ------------------ | ----------------------------------------------------------- |
+| Context Precision  | Did ChromaDB retrieve the right policy rule?                |
+| Context Recall     | Did the retrieved rule contain everything needed to answer? |
+| Faithfulness       | Did the LLM summary stick to what was retrieved?            |
+| Answer Relevancy   | Did the summary directly address the question asked?        |
+
 ---
 
 ## Documented failure modes
@@ -116,6 +130,14 @@ claim_input
 **LLM non-determinism** — `temperature=0` reduces output variation. GEval semantic scoring handles remaining variation without requiring exact string matching.
 
 **Prompt injection (partial)** — adversarial input attempted to override urgency classification via embedded instructions. The agent was hardened by requiring explicit evidence before escalating urgency. Caught and fixed via Promptfoo red-teaming.
+
+---
+
+## Evaluation findings
+
+**Answer Relevancy is lower for the `other` claim type (0.45 vs 0.77–0.84 for other types).** This is not a bug — it reflects a genuine design characteristic. The `other` policy rule is a process instruction ("escalate to a senior assessor") rather than a requirements list. RAGAS generates reverse-engineered questions from the policy summary to compute relevancy; with no concrete requirements to reconstruct, cosine similarity against the original question stays low. GEval alone would not surface this — RAGAS revealed it by evaluating the retrieval and generation steps independently.
+
+**Answer Relevancy improved significantly when the question was constructed rather than inferred.** Initial runs passed bare `claim_type` (e.g. `"motor_vehicle"`) as `user_input`, producing scores of 0.03–0.54. Replacing it with `"What are the requirements for a {claim_type} insurance claim?"` — which matches the query shape already used internally by `policy_store.query_policy()` — raised scores to 0.45–0.84. This confirmed that RAGAS Answer Relevancy is sensitive to question quality, not just answer quality.
 
 ---
 
@@ -181,6 +203,29 @@ node --version
 npm --version
 ```
 
+**Step 7 — apply ragas compatibility patch:**
+
+`ragas==0.4.3` ships with a broken import on `langchain-community>=0.4` installations. Apply this patch after installing dependencies:
+
+```bash
+python - << 'EOF'
+path = "venv/lib/python3.11/site-packages/ragas/llms/base.py"
+with open(path, "r") as f:
+    content = f.read()
+old = "from langchain_community.chat_models.vertexai import ChatVertexAI\nfrom langchain_community.llms import VertexAI"
+new = "from langchain_google_vertexai import ChatVertexAI, VertexAI"
+if old in content:
+    content = content.replace(old, new)
+    with open(path, "w") as f:
+        f.write(content)
+    print("Patched successfully")
+else:
+    print("Already patched or pattern not found")
+EOF
+```
+
+See: https://github.com/vibrantlabsai/ragas/issues/2745
+
 ---
 
 ## How to run it
@@ -191,7 +236,8 @@ npm --version
 4. Create a virtual environment — `python -m venv venv`
 5. Activate the virtual environment — `source venv/bin/activate`
 6. Install dependencies — `pip install -r requirements.txt`
-7. Create a `.env` file in the root directory and add your OpenAI API key:
+7. Apply the ragas compatibility patch (see Setup Step 7 above)
+8. Create a `.env` file in the root directory and add your OpenAI API key:
 
 ```
 OPENAI_API_KEY=your-key-here
@@ -218,6 +264,12 @@ python src/agents/claims_triage_agent.py
 python src/evaluators/claims_triage_evaluator.py
 ```
 
+**Run the RAGAS evaluator:**
+
+```bash
+python src/evaluators/ragas_evaluator.py
+```
+
 **Run the Promptfoo red-teaming evaluation:**
 ```bash
 npx promptfoo@latest eval -c promptfoo.yaml
@@ -232,8 +284,8 @@ CI runs automatically on every PR via GitHub Actions.
 - **Parallel evaluation timeouts** — DeepEval runs test cases asynchronously by default. On resource-constrained machines this can cause timeouts. Test cases are run sequentially in this implementation as a workaround.
 - **Borderline test cases** — Partially correct responses with complex reasoning requirements occasionally cause evaluation timeouts. Root cause is under investigation — likely related to async behaviour on resource-constrained machines or API response latency.
 - **LLM non-determinism** — `temperature=0` reduces but does not eliminate output variation. OpenAI does not guarantee identical outputs even at zero temperature.
-- **Simulated policy knowledge base** — `research_policy` uses a hardcoded rule set. A RAGAS vector retrieval pipeline is planned as a future module.
 - **In-memory vector store** — ChromaDB runs in-memory and reloads policy rules on every agent start. A persistent store is planned as a future improvement.
+- **ragas upstream bug** — `ragas==0.4.3` has a broken import on `langchain-community>=0.4` installations. A manual patch is required post-install. See Setup Step 7.
 
 ---
 
