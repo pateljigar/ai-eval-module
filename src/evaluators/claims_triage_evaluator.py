@@ -15,7 +15,7 @@ from deepeval.test_case import SingleTurnParams
 from deepeval.metrics import GEval
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
-from src.evaluators.fixtures import TEST_CLAIMS
+from src.evaluators.fixtures.claims import TEST_CLAIMS
 from src.agents.claims_triage_agent import app
 
 # GPT-4o-mini as the LLM judge for DeepEval metrics
