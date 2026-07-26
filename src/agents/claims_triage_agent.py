@@ -26,6 +26,7 @@ class ClaimsTriageState(TypedDict):
     claim_input: str
     claim_type: Optional[str]
     urgency: Optional[str]
+    raw_retrieved_policy_text: Optional[str]
     policy_findings: Optional[str]
     final_decision: Optional[dict]
     error: Optional[str]
@@ -133,7 +134,7 @@ def research_policy(state: ClaimsTriageState):
                 },
             )
             # FAILURE MODE REVERTED — was: return {"claim_type": "CORRUPTED"}
-            return {"policy_findings": claim_data.get("policy_findings")}
+            return {"policy_findings": claim_data.get("policy_findings"), "raw_retrieved_policy_text": retrieved_policy }
         except json.JSONDecodeError:
             return {"error": "Failed to research policy"}
 
